@@ -36,4 +36,20 @@ class Producto extends Model
     {
         return 'slug';
     }
+
+    public function isKidsCategory(): bool
+    {
+        $category = mb_strtolower((string) ($this->categoria?->titulo ?? ''));
+
+        return str_contains($category, 'niñ') || str_contains($category, 'kid') || str_contains($category, 'infantil');
+    }
+
+    public function sizeOptions(): array
+    {
+        if ($this->isKidsCategory()) {
+            return ['16', '18', '20', '22', '24', '26', '28'];
+        }
+
+        return ['S', 'M', 'L', 'XL', '2XL'];
+    }
 }

@@ -69,6 +69,40 @@
             color: rgba(255, 255, 255, 0.48);
         }
 
+        .nav-cart-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.55rem;
+            padding: 0.72rem 1rem;
+            border-radius: 999px;
+            border: 1px solid rgba(255,255,255,.12);
+            color: #fff;
+            text-decoration: none;
+            transition: transform .18s ease, border-color .18s ease, background .18s ease;
+            background: rgba(255,255,255,.04);
+        }
+
+        .nav-cart-link:hover {
+            transform: translateY(-1px);
+            border-color: rgba(255,255,255,.2);
+            background: rgba(255,255,255,.08);
+            color: #fff;
+        }
+
+        .nav-cart-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 1.55rem;
+            height: 1.55rem;
+            padding: 0 .4rem;
+            border-radius: 999px;
+            background: var(--cl-accent);
+            color: #fff;
+            font-size: .78rem;
+            font-weight: 800;
+        }
+
         .soft-card {
             background: var(--cl-surface);
             border: 1px solid var(--cl-line);
@@ -683,6 +717,12 @@
             <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="navMain">
+            <div class="ms-auto mt-3 mt-lg-0">
+                <a href="{{ route('cart.index') }}" class="nav-cart-link">
+                    <span>Carrito</span>
+                    <span class="nav-cart-badge">{{ count(session('cart_products', [])) }}</span>
+                </a>
+            </div>
         </div>
     </div>
 </nav>

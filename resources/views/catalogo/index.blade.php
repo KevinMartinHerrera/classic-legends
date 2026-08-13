@@ -46,15 +46,15 @@
                     <a href="{{ route('categoria.show', $categoria) }}" class="catalog-tile catalog-tile--minimal text-decoration-none h-100 d-block">
                         <div class="catalog-tile-media catalog-tile-media--minimal">
                             @if ($categoryCover($categoria))
-                                <img src="{{ $categoryCover($categoria) }}" alt="{{ $categoria->titulo }}">
+                                <img src="{{ $categoryCover($categoria) }}" alt="{{ $categoria->nombre_es ?: $categoria->titulo }}">
                             @else
-                                <div class="tile-fallback">{{ $categoria->titulo }}</div>
+                                <div class="tile-fallback">{{ $categoria->nombre_es ?: $categoria->titulo }}</div>
                             @endif
                         </div>
                         <div class="catalog-tile-copy catalog-tile-copy--minimal">
                             <div class="d-flex align-items-start justify-content-between gap-3">
                                 <div>
-                                    <h2 class="h5 fw-bold mb-1 text-dark">{{ $categoria->titulo }}</h2>
+                                    <h2 class="h5 fw-bold mb-1 text-dark">{{ $categoria->nombre_es ?: $categoria->titulo }}</h2>
                                     <p class="small text-secondary mb-0">Ver colección</p>
                                 </div>
                                 <span class="tile-count">{{ $categoria->productos_count }}</span>

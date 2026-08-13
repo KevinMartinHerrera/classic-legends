@@ -20,7 +20,7 @@
     <div class="d-flex flex-column flex-md-row align-items-md-end justify-content-between gap-3 mb-4">
         <div>
             <div class="eyebrow mb-2">Catálogo / Categoría</div>
-            <h1 class="h2 fw-bold mb-1">{{ $categoria->titulo }}</h1>
+            <h1 class="h2 fw-bold mb-1">{{ $categoria->nombre_es ?: $categoria->titulo }}</h1>
             <p class="text-secondary mb-0">{{ $categoria->productos_count }} productos en esta colección.</p>
         </div>
         <form method="GET" class="search-box d-flex gap-2 align-items-center p-2 flex-grow-1 flex-md-grow-0" style="max-width: 420px;">
@@ -36,12 +36,12 @@
                     <div class="product-card-media">
                         <img src="{{ $coverImage($producto) ?? 'https://via.placeholder.com/800x1000?text=Sin+imagen' }}" alt="{{ $producto->titulo }}" loading="lazy">
                         <div class="position-absolute top-0 start-0 p-3">
-                            <span class="badge rounded-pill text-bg-light text-dark px-3 py-2 border">{{ $producto->categoria?->titulo ?? $categoria->titulo }}</span>
+                        <span class="badge rounded-pill text-bg-light text-dark px-3 py-2 border">{{ $producto->categoria?->nombre_es ?: $producto->categoria?->titulo ?? $categoria->nombre_es ?: $categoria->titulo }}</span>
                         </div>
                     </div>
                     <div class="product-card-body">
-                        <h2 class="h6 fw-bold mb-2 text-dark">{{ $producto->titulo }}</h2>
-                        <p class="small text-secondary mb-0">{{ $producto->descripcion ?? 'Abrir ficha completa' }}</p>
+                    <h2 class="h6 fw-bold mb-2 text-dark">{{ $producto->nombre_es ?: $producto->titulo }}</h2>
+                    <p class="small text-secondary mb-0">{{ $producto->descripcion ?? 'Abrir ficha completa' }}</p>
                     </div>
                 </a>
             </div>

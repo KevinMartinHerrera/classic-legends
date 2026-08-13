@@ -283,6 +283,7 @@ class YupooImporter
      */
     public function cleanSpanishLabel(string $value): string
     {
+        $value = $this->translateForeignTerms($value);
         $value = html_entity_decode(trim($value), ENT_QUOTES | ENT_HTML5, 'UTF-8');
         $value = preg_replace('/[\p{So}\p{Cn}]+/u', ' ', $value) ?? $value;
         $value = preg_replace('/\b(size\s*\d+(?:-\d+)?|talla\s*\d+(?:-\d+)?|sizes?)\b/i', '', $value) ?? $value;
@@ -495,6 +496,11 @@ class YupooImporter
     public function spanishTitle(string $albumId, string $originalTitle): string
     {
         $cleanOriginal = $this->cleanSpanishLabel($originalTitle);
+
+        if (str_contains(mb_strtolower($cleanOriginal), 'nba')) {
+            return $this->spanishNbaTitle($cleanOriginal);
+        }
+
         $club = $this->guessClubName($cleanOriginal) ?? $this->detectClub($cleanOriginal);
         $season = $this->detectSeason($cleanOriginal);
         $variant = $this->detectVariant($cleanOriginal);
@@ -516,9 +522,55 @@ class YupooImporter
         return implode(' · ', array_values(array_unique(array_filter($parts))));
     }
 
+    private function spanishNbaTitle(string $title): string
+    {
+        $clean = $this->translateForeignTerms($title);
+        $clean = $this->cleanSpanishLabel($clean);
+
+        $team = null;
+        if (preg_match('/\b([A-Z][A-Z\- ]{2,})\b/', $clean, $matches)) {
+            $team = trim($matches[1]);
+        }
+
+        $number = null;
+        if (preg_match('/\b(\d{1,3})\b/', $clean, $matches)) {
+            $number = $matches[1];
+        }
+
+        $variant = null;
+        $lower = mb_strtolower($clean);
+        if (str_contains($lower, 'local') || str_contains($lower, 'home')) {
+            $variant = 'local';
+        } elseif (str_contains($lower, 'visitante') || str_contains($lower, 'away')) {
+            $variant = 'visitante';
+        } elseif (str_contains($lower, 'tercera') || str_contains($lower, 'third')) {
+            $variant = 'tercera';
+        }
+
+        $parts = ['Uniforme NBA'];
+
+        if ($team !== null && $team !== '') {
+            $parts[] = $team;
+        }
+
+        if ($number !== null) {
+            $parts[] = $number;
+        }
+
+        if ($variant !== null) {
+            $parts[] = $variant;
+        }
+
+        return implode(' · ', $parts);
+    }
+
     private function detectProductPrefix(string $title): string
     {
         $lower = mb_strtolower($title);
+
+        if (str_contains($lower, 'mlb') || str_contains($lower, 'baseball') || str_contains($lower, 'beisbol') || str_contains($lower, 'béisbol')) {
+            return 'Uniforme de béisbol';
+        }
 
         if (str_contains($lower, 'retro') || str_contains($lower, 'vintage') || str_contains($lower, 'classic')) {
             return 'Uniforme retro';
@@ -612,6 +664,23 @@ class YupooImporter
         $categoryLower = mb_strtolower($this->cleanSpanishLabel($categoryName));
 
         $replacements = [
+            'mlb' => 'béisbol MLB',
+            'baseball' => 'béisbol',
+            'base ball' => 'béisbol',
+            'baseball jersey' => 'uniforme de béisbol',
+            'baseball uniform' => 'uniforme de béisbol',
+            'home jersey' => 'uniforme local',
+            'away jersey' => 'uniforme visitante',
+            'city edition' => 'edición ciudad',
+            'earned edition' => 'edición ganada',
+            'statement edition' => 'edición declaración',
+            'association edition' => 'edición asociación',
+            'official jersey' => 'uniforme oficial',
+            'replica jersey' => 'réplica de uniforme',
+            'player edition' => 'versión jugador',
+            'swingman' => 'swingman',
+            'men' => 'hombre',
+            'women' => 'mujer',
             'adults and youth' => 'adultos y niños',
             'adult and youth' => 'adultos y niños',
             'adults' => 'adultos',
@@ -657,10 +726,91 @@ class YupooImporter
             $translated = preg_replace('/\bkit para niños\b/i', 'kit para niños', $translated) ?? $translated;
         }
 
-        $translated = preg_replace('/\b(?:adults?|youth|kids?|soccer|uniform|jersey|kit|shirt|sleeve|sleeves|training|special|player|version|home|away|third|size|patch)\b/i', ' ', $translated) ?? $translated;
+        $translated = preg_replace('/\b(?:adults?|youth|kids?|soccer|uniform|jersey|kit|shirt|sleeve|sleeves|training|special|player|version|home|away|third|size|patch|baseball|mlb|city|edition|earned|statement|association|official|replica|swingman|authentic|men|women|boys?|girls?)\b/i', ' ', $translated) ?? $translated;
         $translated = preg_replace('/\s+/', ' ', $translated) ?? $translated;
 
         return trim($translated, " \t\n\r\0\x0B-_|/");
+    }
+
+    /**
+     * Translate common English and Chinese Yupoo terms before cleanup.
+     */
+    public function translateForeignTerms(string $value): string
+    {
+        $replacements = [
+            'MLB' => 'MLB',
+            'Baseball' => 'béisbol',
+            'baseball' => 'béisbol',
+            'City Edition' => 'edición ciudad',
+            'Earned Edition' => 'edición ganada',
+            'Statement Edition' => 'edición declaración',
+            'Association Edition' => 'edición asociación',
+            'Official Jersey' => 'uniforme oficial',
+            'Replica Jersey' => 'réplica de uniforme',
+            'Player Edition' => 'versión jugador',
+            'Adults And Youth' => 'adultos y niños',
+            'Adults and Youth' => 'adultos y niños',
+            'Adult and Youth' => 'adultos y niños',
+            'Adults' => 'adultos',
+            'Youth' => 'niños',
+            'Kids' => 'niños',
+            'Kid' => 'niño',
+            'Retro' => 'retro',
+            'Classic' => 'clásico',
+            'Home' => 'local',
+            'Away' => 'visitante',
+            'Third' => 'tercera',
+            'Training' => 'entrenamiento',
+            'Jersey' => 'uniforme',
+            'Jerseys' => 'uniformes',
+            'Shirt' => 'camiseta',
+            'Kit' => 'uniforme',
+            'Soccer' => 'fútbol',
+            'Football' => 'fútbol',
+            'Player Version' => 'versión jugador',
+            'Long Sleeve' => 'manga larga',
+            'Short Sleeve' => 'manga corta',
+            'Size Chart' => 'guía de tallas',
+            'Size' => 'talla',
+            'Patch' => 'parche',
+            'New' => 'nuevo',
+            'Special' => 'especial',
+            'Version' => 'versión',
+            'Home Kit' => 'uniforme local',
+            'Away Kit' => 'uniforme visitante',
+            'Third Kit' => 'uniforme tercera',
+            'Training Suit' => 'conjunto de entrenamiento',
+            'Tracksuit' => 'chándal',
+            'Polo' => 'polo',
+            'Fans Version' => 'versión aficionado',
+            'Authentic' => 'auténtico',
+            'Replica' => 'réplica',
+            'Custom' => 'personalizado',
+            'Classic Football Shirts' => 'camisetas clásicas de fútbol',
+            'Adultos y Niños' => 'adultos y niños',
+            '主场' => 'local',
+            '客场' => 'visitante',
+            '第三' => 'tercera',
+            '训练' => 'entrenamiento',
+            '复古' => 'retro',
+            '经典' => 'clásico',
+            '儿童' => 'niños',
+            '成人' => 'adultos',
+            '球衣' => 'uniforme',
+            '足球' => 'fútbol',
+            '套装' => 'conjunto',
+            '短袖' => 'manga corta',
+            '长袖' => 'manga larga',
+            '版本' => 'versión',
+            '定制' => 'personalizado',
+            '新款' => 'nuevo',
+            '球队' => 'equipo',
+            '俱乐部' => 'club',
+            '国家队' => 'selección nacional',
+            '儿童足球服' => 'uniforme infantil de fútbol',
+        ];
+
+        return strtr($value, $replacements);
     }
 
     /**

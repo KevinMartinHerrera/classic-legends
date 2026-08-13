@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', $producto->titulo.' | Classic Legends')
+@section('title', ($producto->nombre_es ?: $producto->titulo).' | Classic Legends')
 
 @section('content')
     @php
@@ -14,7 +14,7 @@
             ->values();
         $returnUrl = request()->query('from') ?: ($producto->categoria ? route('categoria.show', $producto->categoria) : route('catalogo.index'));
         $productUrl = route('producto.show', $producto);
-        $whatsappMessage = rawurlencode("Hola, me interesa este articulo:\n{$producto->titulo}\nVer producto: {$productUrl}");
+        $whatsappMessage = rawurlencode("Hola, me interesa este artículo:\n".($producto->nombre_es ?: $producto->titulo)."\nVer producto: {$productUrl}");
         $whatsappUrl = 'https://wa.me/529671348034?text='.$whatsappMessage;
     @endphp
 
@@ -67,28 +67,40 @@
                 <div class="detail-panel detail-panel--clean p-4 p-lg-4">
                     <div class="d-flex align-items-center justify-content-between gap-2 mb-3 small text-secondary">
                         <a href="{{ $returnUrl }}" class="text-decoration-none text-secondary">← Volver</a>
-                        <span>{{ $producto->categoria?->titulo ?? 'Sin categoría' }}</span>
+                        <span>{{ $producto->categoria?->nombre_es ?: $producto->categoria?->titulo ?? 'Sin categoría' }}</span>
                     </div>
 
                     <div class="mb-3">
                         <div class="eyebrow mb-2">Catálogo / Detalle</div>
-                        <h1 class="h2 fw-bold mb-3">{{ $producto->titulo }}</h1>
+                        <h1 class="h2 fw-bold mb-3">{{ $producto->nombre_es ?: $producto->titulo }}</h1>
                         <p class="text-secondary mb-0">{{ $producto->descripcion ?? 'Ficha de producto con fotos y referencia.' }}</p>
                     </div>
 
                     <div class="d-flex flex-wrap gap-2 mb-3">
-                        <span class="meta-pill">{{ $producto->categoria?->titulo ?? 'Sin categoría' }}</span>
+                        <span class="meta-pill">{{ $producto->categoria?->nombre_es ?: $producto->categoria?->titulo ?? 'Sin categoría' }}</span>
                         <span class="meta-pill">{{ $galleryUrls->count() }} fotos</span>
                     </div>
 
                     <div class="detail-note mb-4">
                         <div class="small text-uppercase text-secondary letter-spacing-1 mb-1">Descripción</div>
-                        <div class="fw-semibold">{{ $producto->nombre_original ?? $producto->titulo }}</div>
+                        <div class="fw-semibold">{{ $producto->nombre_original ?? $producto->nombre_es ?: $producto->titulo }}</div>
                     </div>
 
                     <div class="detail-actions d-flex flex-column gap-2">
-                        <a href="{{ $whatsappUrl }}" target="_blank" rel="noopener noreferrer" class="btn btn-dark rounded-pill px-4 py-3 fw-semibold">Me interesa este articulo</a>
-                        <a href="{{ $returnUrl }}" class="btn btn-outline-dark rounded-pill px-4 py-3 fw-semibold">Volver al catálogo</a>
+                        <form action="{{ route('cart.add', $producto) }}" method="POST" class="d-grid gap-2">
+                            @csrf
+                            <label class="small text-uppercase text-secondary letter-spacing-1 mb-0">Talla</label>
+                            <select name="talla" class="form-select rounded-pill py-3 px-4">
+                                @foreach ($producto->sizeOptions() as $size)
+                                    <option value="{{ $size }}">{{ $size }}</option>
+                                @endforeach
+                            </select>
+                            <label class="small text-uppercase text-secondary letter-spacing-1 mb-0">Cantidad</label>
+                            <input type="number" name="cantidad" value="1" min="1" max="99" class="form-control rounded-pill py-3 px-4">
+                            <button type="submit" class="btn btn-dark rounded-pill px-4 py-3 fw-semibold w-100">Agregar al carrito</button>
+                        </form>
+                        <a href="{{ $whatsappUrl }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-dark rounded-pill px-4 py-3 fw-semibold">Me interesa este artículo</a>
+                        <a href="{{ $returnUrl }}" class="btn btn-link text-decoration-none text-secondary fw-semibold px-0">Volver al catálogo</a>
                     </div>
 
                     <div class="small text-secondary mt-3">También puedes explorar más productos de la misma colección.</div>
