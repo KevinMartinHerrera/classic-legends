@@ -1,9 +1,9 @@
 const path = require('path');
 
 module.exports = {
-  baseUrl: 'https://classic-football-fhirts052.x.yupoo.com/albums/?page=1',
+  baseUrl: 'https://classic-football-fhirts052.x.yupoo.com/albums',
   outputFile: path.resolve(__dirname, '../storage/app/yupoo/products.json'),
-  maxPages: 9,
+  maxPages: null,
   timeoutMs: 45000,
   retries: 3,
   headless: true,

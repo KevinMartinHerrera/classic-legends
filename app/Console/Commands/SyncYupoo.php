@@ -7,18 +7,22 @@ use Throwable;
 
 class SyncYupoo extends AbstractYupooSyncCommand
 {
-    protected $signature = 'yupoo:sync {--pages= : Limit pages for the scraper}';
+    protected $signature = 'yupoo:sync {--url= : Yupoo albums URL to scrape} {--pages= : Limit pages for the scraper}';
 
     protected $description = 'Run Playwright scraper and import Yupoo albums into MySQL';
 
     public function handle(YupooImporter $importer): int
     {
         try {
-            $pageLimit = is_numeric($this->option('pages')) ? max(1, (int) $this->option('pages')) : 9;
+            $pageLimit = is_numeric($this->option('pages')) ? max(1, (int) $this->option('pages')) : null;
+            $url = is_string($this->option('url')) && trim((string) $this->option('url')) !== ''
+                ? trim((string) $this->option('url'))
+                : null;
 
             $this->line('<info>==============================================</info>');
             $this->line('<info>  Yupoo Sync</info>');
-            $this->line('<info>  Páginas: '.$pageLimit.'</info>');
+            $this->line('<info>  URL: '.($url ?? 'config default').'</info>');
+            $this->line('<info>  Páginas: '.($pageLimit ?? 'auto').'</info>');
             $this->line('<info>==============================================</info>');
 
             $summary = [
@@ -30,20 +34,34 @@ class SyncYupoo extends AbstractYupooSyncCommand
                 'errors' => [],
             ];
 
-            for ($page = 1; $page <= $pageLimit; $page++) {
-                try {
-                    $result = $this->syncPage($importer, $page);
-                    $pageSummary = $result['summary'];
+            if ($url !== null) {
+                $result = $this->syncGallery($importer, $url, $pageLimit);
+                $pageSummary = $result['summary'];
 
-                    $summary['records'] += $pageSummary['records'];
-                    $summary['products_created'] += $pageSummary['products_created'];
-                    $summary['products_updated'] += $pageSummary['products_updated'];
-                    $summary['categories_created'] += $pageSummary['categories_created'];
-                    $summary['images_synced'] += $pageSummary['images_synced'];
-                    $summary['errors'] = array_merge($summary['errors'], $pageSummary['errors']);
-                } catch (Throwable $exception) {
-                    $summary['errors'][] = 'Pagina '.$page.': '.$exception->getMessage();
-                    $this->error('Pagina '.$page.' fallo, continuo con la siguiente.');
+                $summary['records'] += $pageSummary['records'];
+                $summary['products_created'] += $pageSummary['products_created'];
+                $summary['products_updated'] += $pageSummary['products_updated'];
+                $summary['categories_created'] += $pageSummary['categories_created'];
+                $summary['images_synced'] += $pageSummary['images_synced'];
+                $summary['errors'] = array_merge($summary['errors'], $pageSummary['errors']);
+            } else {
+                $pageLimit = $pageLimit ?? 9;
+
+                for ($page = 1; $page <= $pageLimit; $page++) {
+                    try {
+                        $result = $this->syncPage($importer, $page);
+                        $pageSummary = $result['summary'];
+
+                        $summary['records'] += $pageSummary['records'];
+                        $summary['products_created'] += $pageSummary['products_created'];
+                        $summary['products_updated'] += $pageSummary['products_updated'];
+                        $summary['categories_created'] += $pageSummary['categories_created'];
+                        $summary['images_synced'] += $pageSummary['images_synced'];
+                        $summary['errors'] = array_merge($summary['errors'], $pageSummary['errors']);
+                    } catch (Throwable $exception) {
+                        $summary['errors'][] = 'Pagina '.$page.': '.$exception->getMessage();
+                        $this->error('Pagina '.$page.' fallo, continuo con la siguiente.');
+                    }
                 }
             }
 

@@ -13,6 +13,8 @@ class Producto extends Model
     protected $fillable = [
         'categoria_id',
         'yupoo_album_id',
+        'nombre_original',
+        'nombre_es',
         'titulo',
         'slug',
         'portada_url',

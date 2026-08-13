@@ -10,19 +10,31 @@ class CatalogoController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Producto::query()->with(['categoria', 'imagenes']);
+        $categorias = Categoria::query()
+            ->withCount('productos')
+            ->orderByRaw('productos_count desc')
+            ->orderBy('titulo')
+            ->get();
 
-        if ($search = trim((string) $request->query('q', ''))) {
+        $totalCategorias = $categorias->count();
+
+        return view('catalogo.index', compact('categorias', 'totalCategorias'));
+    }
+
+    public function category(Request $request, Categoria $categoria)
+    {
+        $search = trim((string) $request->query('q', ''));
+        $query = $categoria->productos()->with(['categoria', 'imagenes'])->latest();
+
+        if ($search !== '') {
             $query->where('titulo', 'like', '%'.$search.'%');
         }
 
-        $productos = $query->latest()->paginate(28)->withQueryString();
-        $categorias = Categoria::query()->orderBy('titulo')->get();
-        $totalProductos = Producto::query()->count();
-        $totalCategorias = $categorias->count();
-        $featuredProductos = Producto::query()->with(['categoria', 'imagenes'])->latest()->take(3)->get();
+        $productos = $query->paginate(24)->withQueryString();
 
-        return view('catalogo.index', compact('productos', 'categorias', 'search', 'totalProductos', 'totalCategorias', 'featuredProductos'));
+        $categoria->loadCount('productos');
+
+        return view('catalogo.category', compact('categoria', 'productos', 'search'));
     }
 
     public function show(Producto $producto)

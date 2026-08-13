@@ -56,6 +56,12 @@ function normalizeUrl(value, baseUrl) {
   }
 }
 
+function buildPageUrl(baseUrl, pageNumber) {
+  const url = new URL(baseUrl);
+  url.searchParams.set('page', String(pageNumber));
+  return url.toString();
+}
+
 function isPhotoYupooUrl(value) {
   try {
     const url = new URL(value);
@@ -154,6 +160,7 @@ module.exports = {
   parseArgs,
   cleanText,
   normalizeUrl,
+  buildPageUrl,
   isPhotoYupooUrl,
   unique,
   retry,

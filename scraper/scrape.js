@@ -4,6 +4,7 @@ const config = require('./playwright.config');
 const {
   parseArgs,
   normalizeUrl,
+  buildPageUrl,
   unique,
   autoScroll,
   loadPage,
@@ -12,21 +13,38 @@ const {
 
 const args = parseArgs(process.argv.slice(2));
 const requestedPages = Number.isFinite(Number(args.pages)) ? Number(args.pages) : null;
-const pageLimit = Math.max(1, Math.min(requestedPages ?? config.maxPages, config.maxPages));
+const maxPages = Number.isFinite(Number(config.maxPages)) ? Number(config.maxPages) : Number.POSITIVE_INFINITY;
+const pageLimit = Math.max(1, Math.min(requestedPages ?? maxPages, maxPages));
 const startPage = Number.isFinite(Number(args['start-page'])) ? Number(args['start-page']) : 1;
+const baseUrl = typeof args.url === 'string' && args.url ? args.url : config.baseUrl;
 const outputFile = typeof args['output-file'] === 'string' && args['output-file']
   ? args['output-file']
   : config.outputFile;
 
 async function scrapeAlbumIndex(page, pageNumber) {
-  const pageUrl = `https://classic-football-fhirts052.x.yupoo.com/albums/?page=${pageNumber}`;
+  const pageUrl = buildPageUrl(baseUrl, pageNumber);
 
   console.log(`Pagina ${pageNumber}: leyendo listado...`);
-  await loadPage(page, pageUrl, config.timeoutMs, config.retries);
+    await loadPage(page, pageUrl, config.timeoutMs, config.retries);
   await autoScroll(page);
 
-  const albums = await page.evaluate((currentPageUrl) => {
+  const result = await page.evaluate((currentPageUrl) => {
     const clean = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
+    const pageTitle = clean(document.title || '');
+
+    const categoryFromTitle = () => {
+      if (!pageTitle) return null;
+
+      const parts = pageTitle.split(' | ');
+      const categoryIndex = parts.findIndex((part) => /category/i.test(part));
+
+      if (categoryIndex > 0) {
+        return clean(parts[categoryIndex - 1]);
+      }
+
+      return clean(parts[0] || '');
+    };
+
     const isPhotoUrl = (value) => {
       try {
         const url = new URL(value);
@@ -103,9 +121,15 @@ async function scrapeAlbumIndex(page, pageNumber) {
       };
     });
 
-    return albums.filter(Boolean);
+    return {
+      category: categoryFromTitle(),
+      albums: albums.filter(Boolean),
+    };
   }, pageUrl);
-  const uniqueAlbums = unique(albums.map((album) => JSON.stringify(album))).map((item) => JSON.parse(item));
+  const uniqueAlbums = unique(result.albums.map((album) => JSON.stringify({
+    ...album,
+    categoria: result.category || album.categoria || null,
+  }))).map((item) => JSON.parse(item));
 
   console.log(`Pagina ${pageNumber}: ${uniqueAlbums.length} albumes detectados`);
   return uniqueAlbums;
@@ -114,7 +138,7 @@ async function scrapeAlbumIndex(page, pageNumber) {
 async function scrapeAlbumDetail(page, album) {
   console.log(`  -> Album: ${album.titulo}`);
   try {
-    await loadPage(page, album.url, config.timeoutMs, config.retries, album.source_page || config.baseUrl);
+    await loadPage(page, album.url, config.timeoutMs, config.retries, album.source_page || baseUrl);
   } catch {
     console.log('     pagina bloqueada por EdgeOne 567, saltando album');
     return null;

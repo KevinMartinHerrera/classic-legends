@@ -126,9 +126,10 @@ class YupooImporter
             $albumId = (string) ($record['album_id'] ?? '');
             $tituloOriginal = trim((string) ($record['titulo'] ?? ''));
             $url = trim((string) ($record['url'] ?? ''));
-            $categoriaName = 'Retos';
+            $categoriaName = trim((string) ($record['categoria'] ?? '')) ?: 'Sin categoría';
             $portada = $this->normalizeUrl($record['portada'] ?? null);
             $imagenes = $this->normalizeImageList($record['imagenes'] ?? []);
+            $categoriaNameEs = $this->spanishCategoryTitle($categoriaName);
 
             if ($albumId === '' || $url === '') {
                 throw new \RuntimeException('Registro incompleto: album_id, titulo y url son obligatorios.');
@@ -139,12 +140,14 @@ class YupooImporter
             $categoria = null;
             $categoriesCreated = 0;
 
-            $categoriaSlug = $this->uniqueCategorySlug($categoriaName);
+            $categoriaSlug = $this->uniqueCategorySlug($categoriaName, $record['categoria_id'] ?? $record['category_id'] ?? null);
             $categoria = Categoria::query()->firstOrCreate(
                 ['slug' => $categoriaSlug],
                 [
-                    'titulo' => $categoriaName,
-                    'yupoo_url' => null,
+                    'titulo' => $categoriaNameEs,
+                    'nombre_original' => $categoriaName,
+                    'nombre_es' => $categoriaNameEs,
+                    'yupoo_url' => trim((string) ($record['categoria_url'] ?? $record['category_url'] ?? '')) ?: null,
                 ]
             );
 
@@ -152,6 +155,10 @@ class YupooImporter
 
             $producto = Producto::query()->where('yupoo_album_id', $albumId)->first();
             $isNew = $producto === null;
+
+            if ($portada !== null && $this->isAllowedImageUrl($portada)) {
+                $imagenes = $this->preferPortadaFirst($imagenes, $portada);
+            }
 
             if ($producto === null) {
                 $producto = new Producto();
@@ -162,9 +169,11 @@ class YupooImporter
                 'categoria_id' => $categoria?->id,
                 'yupoo_album_id' => $albumId,
                 'titulo' => $titulo,
+                'nombre_original' => $tituloOriginal ?: $titulo,
+                'nombre_es' => $this->translateProduct($tituloOriginal ?: $titulo, $categoriaName),
                 'portada_url' => $portada ?: ($imagenes[0] ?? null),
                 'yupoo_url' => $url,
-                'descripcion' => $tituloOriginal !== '' ? $tituloOriginal : null,
+                'descripcion' => $this->cleanSpanishLabel($tituloOriginal ?: $titulo),
             ]);
 
             $producto->save();
@@ -224,6 +233,33 @@ class YupooImporter
     }
 
     /**
+     * Put the Yupoo cover image first without duplicating it.
+     */
+    private function preferPortadaFirst(array $imagenes, string $portada): array
+    {
+        $final = [];
+        $seen = [];
+
+        $normalizedPortada = $this->normalizeUrl($portada);
+
+        if ($normalizedPortada !== null) {
+            $final[] = $normalizedPortada;
+            $seen[$normalizedPortada] = true;
+        }
+
+        foreach ($imagenes as $imageUrl) {
+            if (isset($seen[$imageUrl])) {
+                continue;
+            }
+
+            $final[] = $imageUrl;
+            $seen[$imageUrl] = true;
+        }
+
+        return $final;
+    }
+
+    /**
      * Normalize image URLs and discard invalid values.
      */
     private function normalizeImageList(array $images): array
@@ -240,6 +276,39 @@ class YupooImporter
         }
 
         return $urls;
+    }
+
+    /**
+     * Normalize a label by stripping emojis, size tags and noisy symbols.
+     */
+    public function cleanSpanishLabel(string $value): string
+    {
+        $value = html_entity_decode(trim($value), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $value = preg_replace('/[\p{So}\p{Cn}]+/u', ' ', $value) ?? $value;
+        $value = preg_replace('/\b(size\s*\d+(?:-\d+)?|talla\s*\d+(?:-\d+)?|sizes?)\b/i', '', $value) ?? $value;
+        $value = preg_replace('/\s*\([^)]*\b(?:size|talla|tallas)\b[^)]*\)\s*/i', ' ', $value) ?? $value;
+        $value = preg_replace('/\s+/', ' ', $value) ?? $value;
+
+        return trim($value, " \t\n\r\0\x0B-_|/");
+    }
+
+    /**
+     * Build a Spanish category title from the source name.
+     */
+    public function spanishCategoryTitle(string $name): string
+    {
+        $clean = $this->cleanSpanishLabel($name);
+        $lower = mb_strtolower($clean);
+
+        if (str_contains($lower, 'kid') || str_contains($lower, 'kids') || str_contains($lower, 'niñ')) {
+            return 'Temporada actual niños';
+        }
+
+        if (str_contains($lower, 'retro')) {
+            return 'Jerseys retro';
+        }
+
+        return $this->translateCategory($clean);
     }
 
     /**
@@ -409,21 +478,32 @@ class YupooImporter
     /**
      * Build a stable category slug.
      */
-    private function uniqueCategorySlug(string $titulo): string
+    private function uniqueCategorySlug(string $titulo, mixed $categoryId = null): string
     {
-        return (Str::slug($titulo) ?: 'categoria').'-'.substr(sha1($titulo), 0, 8);
+        $base = Str::slug($titulo) ?: 'categoria';
+
+        if ($categoryId !== null && $categoryId !== '') {
+            return $base.'-'.preg_replace('/[^a-zA-Z0-9_-]/', '', (string) $categoryId);
+        }
+
+        return $base.'-'.substr(sha1($titulo), 0, 8);
     }
 
     /**
      * Build a Spanish title for display while keeping the source title in description.
      */
-    private function spanishTitle(string $albumId, string $originalTitle): string
+    public function spanishTitle(string $albumId, string $originalTitle): string
     {
-        $cleanOriginal = trim($originalTitle);
-        $club = $this->detectClub($cleanOriginal);
+        $cleanOriginal = $this->cleanSpanishLabel($originalTitle);
+        $club = $this->guessClubName($cleanOriginal) ?? $this->detectClub($cleanOriginal);
         $season = $this->detectSeason($cleanOriginal);
+        $variant = $this->detectVariant($cleanOriginal);
 
-        $parts = ['Jersey retro'];
+        $parts = [$this->detectProductPrefix($cleanOriginal)];
+
+        if ($variant !== null) {
+            $parts[] = $variant;
+        }
 
         if ($club !== null) {
             $parts[] = $club;
@@ -433,7 +513,154 @@ class YupooImporter
             $parts[] = $season;
         }
 
-        return implode(' - ', $parts);
+        return implode(' · ', array_values(array_unique(array_filter($parts))));
+    }
+
+    private function detectProductPrefix(string $title): string
+    {
+        $lower = mb_strtolower($title);
+
+        if (str_contains($lower, 'retro') || str_contains($lower, 'vintage') || str_contains($lower, 'classic')) {
+            return 'Uniforme retro';
+        }
+
+        if (str_contains($lower, 'kid') || str_contains($lower, 'kids') || str_contains($lower, 'youth') || str_contains($lower, 'niñ')) {
+            return 'Uniforme infantil';
+        }
+
+        return 'Uniforme de fútbol';
+    }
+
+    private function detectVariant(string $title): ?string
+    {
+        $lower = mb_strtolower($title);
+
+        if (str_contains($lower, 'home')) {
+            return 'local';
+        }
+
+        if (str_contains($lower, 'away')) {
+            return 'visitante';
+        }
+
+        if (str_contains($lower, 'third')) {
+            return 'tercera';
+        }
+
+        if (str_contains($lower, 'training')) {
+            return 'entrenamiento';
+        }
+
+        return null;
+    }
+
+    private function guessClubName(string $title): ?string
+    {
+        $text = $this->cleanSpanishLabel($title);
+        $text = preg_replace('/\b(?:19|20)\d{2}(?:\s*[-\/ ]\s*\d{2,4})?\b/', ' ', $text) ?? $text;
+        $text = preg_replace('/\b(?:kid|kids|youth|adult|adults|and|home|away|third|special|player|version|long|short|sleeve|sleeves|soccer|uniform|kit|jersey|training|li)\b/i', ' ', $text) ?? $text;
+        $text = preg_replace('/[^\p{L}\p{N}\s]+/u', ' ', $text) ?? $text;
+        $text = preg_replace('/\s+/', ' ', $text) ?? $text;
+        $text = trim($text);
+
+        if ($text === '') {
+            return null;
+        }
+
+        return Str::title(mb_strtolower($text));
+    }
+
+    public function translateCategory(string $name): string
+    {
+        $name = $this->cleanSpanishLabel($name);
+
+        $map = [
+            'Kid Retro Jerseys' => 'Jerseys retro para niños',
+            'Retro Jerseys' => 'Jerseys retro',
+            'Kids' => 'Niños',
+            'Premier League' => 'Premier League',
+            'La Liga' => 'La Liga',
+            'Bundesliga' => 'Bundesliga',
+            'Ligue 1' => 'Ligue 1',
+            'Serie A' => 'Serie A',
+            'Liga MX' => 'Liga MX',
+            'Eredivisie' => 'Eredivisie',
+            'National Teams' => 'Selecciones nacionales',
+            'Club Teams' => 'Clubes',
+            'Kids Club Teams' => 'Clubes infantiles',
+            'Kids National Teams' => 'Selecciones infantiles',
+            'Quick Access' => 'Acceso rápido',
+            'New' => 'Nuevo',
+            'Polo' => 'Polo',
+            'Tracksuit' => 'Chándal',
+            'Training Vests' => 'Chalecos de entrenamiento',
+            'Blank Soccer Kit' => 'Uniformes en blanco',
+            'Winter Clothes' => 'Ropa de invierno',
+        ];
+
+        return $map[$name] ?? $name;
+    }
+
+    public function translateProduct(string $name, string $categoryName = ''): string
+    {
+        $name = $this->cleanSpanishLabel($name);
+
+        if ($name === '') {
+            return $name;
+        }
+
+        $categoryLower = mb_strtolower($this->cleanSpanishLabel($categoryName));
+
+        $replacements = [
+            'adults and youth' => 'adultos y niños',
+            'adult and youth' => 'adultos y niños',
+            'adults' => 'adultos',
+            'youth' => 'niños',
+            'kids' => 'niños',
+            'kid kit' => 'uniforme infantil',
+            'kids kit' => 'uniforme infantil',
+            'kid jersey' => 'uniforme infantil',
+            'kids jersey' => 'uniforme infantil',
+            'retro jersey' => 'uniforme retro',
+            'jersey retro' => 'uniforme retro',
+            'home soccer uniform' => 'uniforme local de fútbol',
+            'away soccer uniform' => 'uniforme visitante de fútbol',
+            'soccer uniform' => 'uniforme de fútbol',
+            'soccer jersey' => 'uniforme de fútbol',
+            'jersey' => 'uniforme',
+            'shirt' => 'camiseta',
+            'away' => 'visitante',
+            'home' => 'local',
+            'third' => 'tercera',
+            'special' => 'especial',
+            'player version' => 'versión jugador',
+            'long sleeve' => 'manga larga',
+            'short sleeve' => 'manga corta',
+            'sleeves' => 'mangas',
+            'sleeve' => 'manga',
+            'training suit' => 'conjunto de entrenamiento',
+            'training' => 'entrenamiento',
+            'size chart' => 'guía de tallas',
+            'size 16-28' => 'tallas 16-28',
+            'size' => 'talla',
+            'patch' => 'parche',
+            'kit' => 'uniforme',
+        ];
+
+        $translated = $name;
+
+        foreach ($replacements as $search => $replace) {
+            $translated = str_ireplace($search, $replace, $translated);
+        }
+
+        if ($categoryLower !== '' && (str_contains($categoryLower, 'kid') || str_contains($categoryLower, 'niñ'))) {
+            $translated = preg_replace('/\bkit para niños\b/i', 'kit para niños', $translated) ?? $translated;
+        }
+
+        $translated = preg_replace('/\b(?:adults?|youth|kids?|soccer|uniform|jersey|kit|shirt|sleeve|sleeves|training|special|player|version|home|away|third|size|patch)\b/i', ' ', $translated) ?? $translated;
+        $translated = preg_replace('/\s+/', ' ', $translated) ?? $translated;
+
+        return trim($translated, " \t\n\r\0\x0B-_|/");
     }
 
     /**
@@ -508,11 +735,30 @@ class YupooImporter
      */
     private function detectSeason(string $title): ?string
     {
-        if (preg_match('/(19\d{2}\/\d{2}|20\d{2}\/\d{2}|19\d{2}|20\d{2})/', $title, $matches)) {
-            return $matches[1];
+        if (preg_match('/\b((?:19|20)\d{2}(?:\s*[-\/ ]\s*\d{2,4})?|\d{2}\s*[-\/ ]\s*\d{2})\b/', $title, $matches)) {
+            return $this->normalizeSeasonLabel($matches[1]);
         }
 
         return null;
+    }
+
+    private function normalizeSeasonLabel(string $season): string
+    {
+        $season = preg_replace('/\s+/', '', trim($season)) ?? trim($season);
+        $season = str_replace('/', '-', $season);
+
+        if (preg_match('/^(\d{4})-(\d{2,4})$/', $season, $matches)) {
+            $start = substr($matches[1], -2);
+            $end = substr($matches[2], -2);
+
+            return $start.'-'.$end;
+        }
+
+        if (preg_match('/^(\d{2})-(\d{2})$/', $season, $matches)) {
+            return $matches[1].'-'.$matches[2];
+        }
+
+        return $season;
     }
 
     private function recordLabel(array $record): string

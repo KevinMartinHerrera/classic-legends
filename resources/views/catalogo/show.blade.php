@@ -7,76 +7,93 @@
         $mainImageUrl = $producto->portada_url
             ? route('yupoo.image', ['u' => $producto->portada_url])
             : ($producto->imagenes->first() ? route('yupoo.image', ['u' => $producto->imagenes->first()->url]) : 'https://via.placeholder.com/1200x1500?text=Sin+imagen');
-        $galleryImages = $producto->imagenes->take(8);
+        $galleryImages = $producto->imagenes->take(10);
         $galleryUrls = collect([$mainImageUrl])
             ->merge($galleryImages->map(fn ($imagen) => route('yupoo.image', ['u' => $imagen->url])))
             ->unique()
             ->values();
+        $returnUrl = request()->query('from') ?: ($producto->categoria ? route('categoria.show', $producto->categoria) : route('catalogo.index'));
+        $productUrl = route('producto.show', $producto);
+        $whatsappMessage = rawurlencode("Hola, me interesa este articulo:\n{$producto->titulo}\nVer producto: {$productUrl}");
+        $whatsappUrl = 'https://wa.me/529671348034?text='.$whatsappMessage;
     @endphp
 
-    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4">
-        <div>
-            <div class="small text-uppercase text-secondary letter-spacing-1 mb-2">Catálogo / Detalle</div>
-            <h1 class="h2 fw-bold mb-1">{{ $producto->titulo }}</h1>
-            <p class="text-secondary mb-0">Ficha de producto con fotos y referencia.</p>
-        </div>
-        <a href="{{ url('/') }}" class="btn btn-outline-dark rounded-pill px-4">Volver al catálogo</a>
-    </div>
-
-    <div class="row g-4 mb-4 align-items-start">
-        <div class="col-12 col-lg-7">
-            <div class="soft-card overflow-hidden h-100">
-                <div id="productGalleryCarousel" class="carousel slide h-100" data-bs-touch="true">
-                    <div class="carousel-indicators mb-0">
-                        @foreach ($galleryUrls as $index => $url)
-                            <button type="button" data-bs-target="#productGalleryCarousel" data-bs-slide-to="{{ $index }}" @class(['active' => $index === 0]) aria-label="Imagen {{ $index + 1 }}"></button>
-                        @endforeach
-                    </div>
-
-                    <div class="carousel-inner h-100">
-                        @foreach ($galleryUrls as $index => $url)
-                            <div @class(['carousel-item', 'active' => $index === 0])>
-                                <div class="position-relative bg-light" style="height: 640px; overflow: hidden;">
-                                    <img src="{{ $url }}" class="w-100 h-100" style="object-fit: cover; object-position: center center; transform: scale(1.1); transform-origin: center center;" alt="{{ $producto->titulo }}" loading="{{ $index === 0 ? 'eager' : 'lazy' }}">
-                                </div>
+    <section class="detail-showcase mb-4 mb-lg-5">
+        <div class="row g-4 g-lg-5 align-items-start">
+            <div class="col-12 col-lg-7">
+                <div class="detail-stage soft-card p-3 p-lg-4">
+                    <div class="detail-zoom-wrap">
+                        <div id="productGalleryCarousel" class="carousel slide h-100" data-bs-touch="true">
+                            <div class="carousel-indicators mb-0">
+                                @foreach ($galleryUrls as $index => $url)
+                                    <button type="button" data-bs-target="#productGalleryCarousel" data-bs-slide-to="{{ $index }}" @class(['active' => $index === 0]) aria-label="Imagen {{ $index + 1 }}"></button>
+                                @endforeach
                             </div>
-                        @endforeach
+
+                            <div class="carousel-inner h-100">
+                                @foreach ($galleryUrls as $index => $url)
+                                    <div @class(['carousel-item', 'active' => $index === 0])>
+                                        <div class="detail-image-shell">
+                                            <img src="{{ $url }}" class="detail-image-zoom" alt="{{ $producto->titulo }}" loading="{{ $index === 0 ? 'eager' : 'lazy' }}">
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+
+                            <button class="carousel-control-prev" type="button" data-bs-target="#productGalleryCarousel" data-bs-slide="prev">
+                                <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                                <span class="visually-hidden">Anterior</span>
+                            </button>
+                            <button class="carousel-control-next" type="button" data-bs-target="#productGalleryCarousel" data-bs-slide="next">
+                                <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                                <span class="visually-hidden">Siguiente</span>
+                            </button>
+                        </div>
                     </div>
 
-                    <button class="carousel-control-prev" type="button" data-bs-target="#productGalleryCarousel" data-bs-slide="prev">
-                        <span class="carousel-control-prev-icon" aria-hidden="true"></span>
-                        <span class="visually-hidden">Anterior</span>
-                    </button>
-                    <button class="carousel-control-next" type="button" data-bs-target="#productGalleryCarousel" data-bs-slide="next">
-                        <span class="carousel-control-next-icon" aria-hidden="true"></span>
-                        <span class="visually-hidden">Siguiente</span>
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-12 col-lg-5">
-            <div class="soft-card h-100">
-                <div class="card-body p-4">
-                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-                        <h2 class="h6 text-uppercase letter-spacing-1 mb-0">Galería</h2>
-                        <span class="small text-secondary">Selecciona una imagen</span>
-                    </div>
-                    <div class="row row-cols-2 row-cols-md-3 row-cols-lg-4 g-2">
+                    <div class="row g-2 mt-3 row-cols-3 row-cols-md-5">
                         @foreach ($galleryUrls as $index => $url)
                             <div class="col">
-                                <button type="button" class="border-0 p-0 bg-transparent w-100" data-bs-target="#productGalleryCarousel" data-bs-slide-to="{{ $index }}" aria-label="Ver imagen {{ $index + 1 }}">
-                                    <img src="{{ $url }}" class="img-fluid rounded-3 border w-100" loading="lazy" style="object-fit: cover; aspect-ratio: 4 / 5;" alt="{{ $producto->titulo }}">
+                                <button type="button" class="detail-thumb w-100 p-0 bg-transparent border-0" data-bs-target="#productGalleryCarousel" data-bs-slide-to="{{ $index }}" aria-label="Ver imagen {{ $index + 1 }}">
+                                    <img src="{{ $url }}" alt="{{ $producto->titulo }}" loading="lazy">
                                 </button>
                             </div>
                         @endforeach
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <div class="mt-4 d-flex justify-content-center">
-        <a href="{{ url('/') }}" class="btn btn-outline-dark rounded-pill px-4">Volver al catálogo</a>
-    </div>
+            <div class="col-12 col-lg-5">
+                <div class="detail-panel detail-panel--clean p-4 p-lg-4">
+                    <div class="d-flex align-items-center justify-content-between gap-2 mb-3 small text-secondary">
+                        <a href="{{ $returnUrl }}" class="text-decoration-none text-secondary">← Volver</a>
+                        <span>{{ $producto->categoria?->titulo ?? 'Sin categoría' }}</span>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="eyebrow mb-2">Catálogo / Detalle</div>
+                        <h1 class="h2 fw-bold mb-3">{{ $producto->titulo }}</h1>
+                        <p class="text-secondary mb-0">{{ $producto->descripcion ?? 'Ficha de producto con fotos y referencia.' }}</p>
+                    </div>
+
+                    <div class="d-flex flex-wrap gap-2 mb-3">
+                        <span class="meta-pill">{{ $producto->categoria?->titulo ?? 'Sin categoría' }}</span>
+                        <span class="meta-pill">{{ $galleryUrls->count() }} fotos</span>
+                    </div>
+
+                    <div class="detail-note mb-4">
+                        <div class="small text-uppercase text-secondary letter-spacing-1 mb-1">Descripción</div>
+                        <div class="fw-semibold">{{ $producto->nombre_original ?? $producto->titulo }}</div>
+                    </div>
+
+                    <div class="detail-actions d-flex flex-column gap-2">
+                        <a href="{{ $whatsappUrl }}" target="_blank" rel="noopener noreferrer" class="btn btn-dark rounded-pill px-4 py-3 fw-semibold">Me interesa este articulo</a>
+                        <a href="{{ $returnUrl }}" class="btn btn-outline-dark rounded-pill px-4 py-3 fw-semibold">Volver al catálogo</a>
+                    </div>
+
+                    <div class="small text-secondary mt-3">También puedes explorar más productos de la misma colección.</div>
+                </div>
+            </div>
+        </div>
+    </section>
 @endsection

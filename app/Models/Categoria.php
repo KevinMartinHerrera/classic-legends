@@ -13,6 +13,8 @@ class Categoria extends Model
     protected $fillable = [
         'parent_id',
         'yupoo_category_id',
+        'nombre_original',
+        'nombre_es',
         'titulo',
         'slug',
         'yupoo_url',
